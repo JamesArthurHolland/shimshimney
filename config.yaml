@@ -1,0 +1,4 @@
+operator_url: "http://operator:8080"
+build: "go build ./..."
+run: "go run ."
+build_mode: "hot"

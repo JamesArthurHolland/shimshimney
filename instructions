@@ -1,0 +1,91 @@
+# Instructions
+
+You will build 3 packages:
+ - one for the operator
+ - one for the shim (to run in each dockerfile)
+ - one for the shimshimney cli tool
+
+# Operator
+
+Build a k8s operator with operator-sdk.
+
+When the scaffolding has been created, make a git commit to keep the rest of the code separate from the scaffolding.
+
+Specification:
+
+1. The operator or controller should have 2 http endpoint that can be hit from outside the cluster.
+- /rebuild  -> hits the endpoint of every pod that has been registered.
+- /register -> each pod that runs the shim should hit this endpoint to register itself with the operator.
+- /heartbeat -> each pod that runs the shim should hit this endpoint to let the operator know that it is still alive.
+- /health -> the operator should return 200 if it is healthy and running.
+
+2. Can the operator work out which pod the /register command came from? Or should the `from` info be sent along with?
+I think we can avoid labels if possible
+
+3. The port that the pod listens on should be sent to the operator as part of the register payload.
+
+4. The operator should create a k8s service to each pod that runs the shim, with target port being the port that was given.
+
+5. When /rebuild is hit, the operator should hit the endpoint of every pod that has been registered. This should rebuild
+the code in the pod, thereby allowing the code to update without having to rebuild the container which is time consuming.
+
+# The shim
+
+The shim needs to update its heartbeat on a regular basis to the operator.
+Shim should have endpoints:
+- /heartbeat -> hits the operator to let it know that it is still alive.
+- /health -> returns 200 if the shim is healthy and running.
+- /rebuild -> hits the operator to trigger a rebuild of the code in the pod.
+
+# The example
+
+/example
+  /projects
+     /dockerfile
+     /api
+     /common
+     /backend-1
+     /backend-2
+     ...
+
+
+Each project should be a golang project which is built by a script then deployed with k8s.
+
+It should be deployed to a k3s cluster, the setup for that should automated.
+
+- Each individual project should build in parallel and be deployed to the cluster.
+
+- The operator should be able to rebuild the code in each pod without having to rebuild the container. This means the k8s
+must handle some sort of volume mount or shared volume that allows the code to be updated in the pod without rebuilding the container.
+
+- The shim should be the entrypoint / cmd for the dockerfile
+
+# common package
+
+this should contain a logger which is used in all the backends.
+
+there should be 8 backends, each should just respond with a simple "hello world" message and the name of the backend.
+
+# The shimshimney cli tool
+
+- Use cobra to make a shimshimney cli program that can be used to interact with the operator and the shim.
+- The cli should have commands to:
+  - list all registered pods and their status
+  - trigger a rebuild of all registered pods
+  - check the health of the operator and shim
+
+(then in the operator api add all this functionaility if not previously mentioned)
+
+# The config file
+
+The config file should be a yaml file that contains the following information:
+- The external url of the operator api
+- The "build" command that should be run in the pod to rebuild the code for a static container
+- The "run" command that should be run in the pod to run the code for a static container
+
+Build mode is "SHIMNEY_MODE=hot" and "SHIMNEY_MODE=cold" for hot and cold builds respectively. The operator should be able to handle both modes.
+
+# The dockerfile
+
+The dockerfiles should run from the root of the project so that the code can be built together to make use of go mod and go workspaces
+to allow for shared code between the projects, like the "common" package.
