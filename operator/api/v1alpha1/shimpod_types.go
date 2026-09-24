@@ -9,11 +9,11 @@ import (
 
 // ShimPodSpec defines the desired state of ShimPod
 type ShimPodSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of ShimPod. Edit shimpod_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	PodID       string            `json:"podID"`
+	Port        int32             `json:"port"`
+	TargetPort  int32             `json:"targetPort"`
+	Selector    map[string]string `json:"selector,omitempty"`
+	ServiceName string            `json:"serviceName,omitempty"`
 }
 
 // ShimPodStatus defines the observed state of ShimPod

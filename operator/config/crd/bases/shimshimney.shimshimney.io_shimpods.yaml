@@ -39,10 +39,24 @@ spec:
           spec:
             description: ShimPodSpec defines the desired state of ShimPod
             properties:
-              foo:
-                description: Foo is an example field of ShimPod. Edit shimpod_types.go
-                  to remove/update
+              podID:
                 type: string
+              port:
+                format: int32
+                type: integer
+              selector:
+                additionalProperties:
+                  type: string
+                type: object
+              serviceName:
+                type: string
+              targetPort:
+                format: int32
+                type: integer
+            required:
+            - podID
+            - port
+            - targetPort
             type: object
           status:
             description: ShimPodStatus defines the observed state of ShimPod
