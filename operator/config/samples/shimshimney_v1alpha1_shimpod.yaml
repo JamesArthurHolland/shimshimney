@@ -1,0 +1,9 @@
+apiVersion: shimshimney.shimshimney.io/v1alpha1
+kind: ShimPod
+metadata:
+  labels:
+    app.kubernetes.io/name: shimshimney
+    app.kubernetes.io/managed-by: kustomize
+  name: shimpod-sample
+spec:
+  # TODO(user): Add fields here

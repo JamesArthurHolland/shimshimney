@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- shimshimney_v1alpha1_shimpod.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
