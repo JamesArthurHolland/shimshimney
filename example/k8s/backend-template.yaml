@@ -1,0 +1,102 @@
+
+# Template for deploying one example backend as a shim-managed pod.
+#
+# Copy or process this file with envsubst (see example/scripts/build-and-deploy.sh)
+# to fill in NAME, NAMESPACE, OPERATOR_NAMESPACE, IMAGE_TAG, and REPO_PATH.
+#
+# REPO_PATH must point at the shimshimney repository checkout on the k3s
+# node's filesystem (the k3d setup mounts the local checkout into the node).
+# The hostPath volume exposes edits to running pods, so /rebuild can recompile
+# without redeploying the image. Rebuild does not yet restart the running app.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app: ${NAME}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${NAME}
+  template:
+    metadata:
+      labels:
+        app: ${NAME}
+        pod_id: ${NAME}
+    spec:
+      containers:
+        - name: shim
+          image: shimshimney/shim:${IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: APP_NAME
+              value: ${NAME}
+            - name: APP_DIR
+              value: /workspace/example/projects/${NAME}
+            - name: APP_PORT
+              value: "8080"
+            - name: PORT
+              value: "9090"
+            - name: POD_ID
+              value: ${NAME}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SHIMNEY_OPERATOR_URL
+              value: "http://operator.${OPERATOR_NAMESPACE}.svc.cluster.local:8080"
+          ports:
+            - name: shim
+              containerPort: 9090
+            - name: app
+              containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /health
+              port: shim
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: shim
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: shim
+          volumeMounts:
+            - name: project-source
+              mountPath: /workspace/example
+            - name: pkg-source
+              mountPath: /workspace/pkg
+      volumes:
+        - name: project-source
+          hostPath:
+            path: ${REPO_PATH}/example
+            type: Directory
+        - name: pkg-source
+          hostPath:
+            path: ${REPO_PATH}/pkg
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${NAME}
+  namespace: ${NAMESPACE}
+spec:
+  selector:
+    app: ${NAME}
+  ports:
+    - name: app
+      port: 80
+      targetPort: app
+    - name: shim
+      port: 9090
+      targetPort: shim

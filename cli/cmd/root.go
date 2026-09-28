@@ -40,30 +40,57 @@ var listCmd = &cobra.Command{
 			return nil
 		}
 		for _, pod := range pods {
-			fmt.Printf("%s | %s | %s:%d | %s\n", pod.PodID, pod.Name, pod.Host, pod.Port, pod.Status)
+			fmt.Printf("%s | %s | %s | %s:%d | %s\n", pod.Namespace, pod.PodID, pod.Name, pod.Host, pod.Port, pod.Status)
 		}
 		return nil
 	},
 }
 
 var rebuildCmd = &cobra.Command{
-	Use:   "rebuild",
-	Short: "Trigger a rebuild of all registered pods",
+	Use:   "rebuild <namespace>",
+	Short: "Trigger a rebuild of registered pods in one namespace",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c := client.New(operatorURL)
-		return c.Rebuild()
+		results, err := c.Rebuild(args[0])
+		if err != nil {
+			return err
+		}
+		if len(results) == 0 {
+			fmt.Println("No pods registered")
+			return nil
+		}
+		for _, result := range results {
+			fmt.Println(result)
+		}
+		return nil
 	},
 }
 
+var shimURL string
+
 var healthCmd = &cobra.Command{
 	Use:   "health",
-	Short: "Check operator health",
+	Short: "Check operator or shim health",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if shimURL != "" {
+			c := client.New(shimURL)
+			if err := c.Health(); err != nil {
+				return fmt.Errorf("shim at %s is unhealthy: %w", shimURL, err)
+			}
+			fmt.Printf("shim at %s is healthy\n", shimURL)
+			return nil
+		}
 		c := client.New(operatorURL)
-		return c.Health()
+		if err := c.Health(); err != nil {
+			return fmt.Errorf("operator at %s is unhealthy: %w", operatorURL, err)
+		}
+		fmt.Printf("operator at %s is healthy\n", operatorURL)
+		return nil
 	},
 }
 
 func init() {
+	healthCmd.Flags().StringVar(&shimURL, "shim", "", "check the health of a specific shim by URL instead of the operator")
 	rootCmd.AddCommand(listCmd, rebuildCmd, healthCmd)
 }

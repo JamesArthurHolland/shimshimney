@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: operator
+  namespace: ${OPERATOR_NAMESPACE}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: operator.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: operator
+                port:
+                  number: 8080

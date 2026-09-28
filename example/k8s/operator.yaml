@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  namespace: ${OPERATOR_NAMESPACE}
+  labels:
+    app: operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: operator
+  template:
+    metadata:
+      labels:
+        app: operator
+    spec:
+      serviceAccountName: shimshimney-operator
+      containers:
+        - name: operator
+          image: shimshimney/operator:${IMAGE_TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: OPERATOR_ADDR
+              value: "0.0.0.0:8080"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: operator
+  namespace: ${OPERATOR_NAMESPACE}
+spec:
+  selector:
+    app: operator
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

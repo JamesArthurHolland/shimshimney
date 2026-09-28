@@ -1,0 +1,4 @@
+operator_url: "http://operator.shimshimney.svc.cluster.local:8080"
+build: "go build -o /tmp/shimshimney-app ."
+run: "/tmp/shimshimney-app"
+build_mode: "hot"

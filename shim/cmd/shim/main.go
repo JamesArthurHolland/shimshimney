@@ -19,36 +19,28 @@ import (
 )
 
 func main() {
-	cfgPath := os.Getenv("CONFIG_PATH")
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	cfgPath := os.Getenv("SHIMNEY_CONFIG_PATH")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		cfg = config.Config{
-			OperatorURL: os.Getenv("OPERATOR_URL"),
-			BuildMode:   os.Getenv("SHIMNEY_MODE"),
-			Build:       os.Getenv("BUILD_COMMAND"),
-			Run:         os.Getenv("RUN_COMMAND"),
+			BuildMode: "hot",
 		}
 	}
-	if cfg.OperatorURL == "" {
-		cfg.OperatorURL = os.Getenv("OPERATOR_URL")
-	}
-	if cfg.BuildMode == "" {
-		cfg.BuildMode = os.Getenv("SHIMNEY_MODE")
-	}
-	if cfg.Build == "" {
-		cfg.Build = os.Getenv("BUILD_COMMAND")
-	}
-	if cfg.Run == "" {
-		cfg.Run = os.Getenv("RUN_COMMAND")
-	}
-	if cfg.BuildMode == "" {
-		cfg.BuildMode = "hot"
-	}
+	cfg = config.ApplyEnv(cfg)
 	logger := shlogger.New("shim")
 	runner := runner.New(cfg, logger)
+	if cfg.IsCold() {
+		return runner.Rebuild()
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "9090"
 	}
 	name := os.Getenv("APP_NAME")
 	if name == "" {
@@ -58,12 +50,17 @@ func main() {
 	if podID == "" {
 		podID = fmt.Sprintf("%s-%d", name, rand.Intn(1000000))
 	}
+	namespace := os.Getenv("POD_NAMESPACE")
+	if namespace == "" {
+		return fmt.Errorf("POD_NAMESPACE is required in hot mode")
+	}
 	operatorURL := cfg.OperatorURL
 	if operatorURL == "" {
 		operatorURL = "http://operator:8080"
 	}
 	client := pclient.New(operatorURL)
-	req := api.RegisterRequest{PodID: podID, Name: name, Port: mustInt(port), Host: os.Getenv("HOST"), BuildMode: cfg.BuildMode}
+	host := os.Getenv("HOST")
+	req := api.RegisterRequest{Namespace: namespace, PodID: podID, Name: name, Port: mustInt(port), Host: host}
 	if err := client.Register(req); err != nil {
 		logger.Warn("register failed", slog.String("error", err.Error()))
 	}
@@ -73,31 +70,38 @@ func main() {
 		_ = json.NewEncoder(w).Encode(api.HealthResponse{Status: "ok", Timestamp: time.Now()})
 	})
 	m.HandleFunc("/heartbeat", func(w http.ResponseWriter, r *http.Request) {
-		if err := client.Heartbeat(api.HeartbeatRequest{PodID: podID, Name: name, Port: mustInt(port), State: "healthy"}); err != nil {
+		if err := client.Heartbeat(api.HeartbeatRequest{Namespace: namespace, PodID: podID, Name: name, Host: host, Port: mustInt(port), State: "healthy"}); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 	m.HandleFunc("/rebuild", func(w http.ResponseWriter, r *http.Request) {
-		if err := runner.Rebuild(); err != nil {
+		if err := runner.Restart(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(api.MessageResponse{OK: true, Message: "rebuild initiated"})
+		_ = json.NewEncoder(w).Encode(api.MessageResponse{OK: true, Message: "rebuilt and restarted"})
 	})
+	if cfg.IsHot() {
+		if err := runner.Rebuild(); err != nil {
+			return err
+		}
+	}
+	if err := runner.Start(); err != nil {
+		return err
+	}
+	defer runner.Stop()
 	go func() {
 		for range time.Tick(10 * time.Second) {
-			if err := client.Heartbeat(api.HeartbeatRequest{PodID: podID, Name: name, Port: mustInt(port), State: "healthy"}); err != nil {
+			if err := client.Heartbeat(api.HeartbeatRequest{Namespace: namespace, PodID: podID, Name: name, Host: host, Port: mustInt(port), State: "healthy"}); err != nil {
 				logger.Warn("heartbeat failed", slog.String("error", err.Error()))
 			}
 		}
 	}()
 	log.Printf("shim serving on :%s", port)
-	if err := http.ListenAndServe(":"+port, m); err != nil {
-		log.Fatal(err)
-	}
+	return http.ListenAndServe(":"+port, m)
 }
 
 func mustInt(value string) int {

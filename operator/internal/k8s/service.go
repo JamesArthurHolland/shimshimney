@@ -8,6 +8,7 @@ import (
 )
 
 type Service struct {
+	Namespace  string
 	Name       string
 	Port       int
 	TargetPort int
@@ -28,6 +29,7 @@ func (m *Manager) EnsurePodService(pod *registry.Pod) Service {
 	defer m.mu.Unlock()
 	name := fmt.Sprintf("svc-%s", pod.PodID)
 	service := Service{
+		Namespace:  pod.Namespace,
 		Name:       name,
 		Port:       pod.Port,
 		TargetPort: pod.Port,
@@ -35,7 +37,7 @@ func (m *Manager) EnsurePodService(pod *registry.Pod) Service {
 			"pod_id": pod.PodID,
 		},
 	}
-	m.services[name] = service
+	m.services[pod.Namespace+"/"+name] = service
 	return service
 }
 

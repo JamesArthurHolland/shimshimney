@@ -19,7 +19,7 @@ type Client struct {
 func New(baseURL string) *Client {
 	return &Client{
 		BaseURL: strings.TrimRight(baseURL, "/"),
-		HTTP: &http.Client{Timeout: 10 * time.Second},
+		HTTP:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -74,8 +74,25 @@ func (c *Client) Heartbeat(req api.HeartbeatRequest) error {
 	return c.doJSON(http.MethodPost, "/heartbeat", req, nil)
 }
 
-func (c *Client) Rebuild() error {
-	return c.doJSON(http.MethodPost, "/rebuild", nil, nil)
+func (c *Client) Rebuild(namespace string) ([]string, error) {
+	if strings.TrimSpace(namespace) == "" {
+		return nil, fmt.Errorf("namespace is required for rebuild")
+	}
+	var result struct {
+		OK      bool     `json:"ok"`
+		Results []string `json:"results"`
+	}
+	// Rebuilds compile every pod in the namespace, so allow longer than the default timeout.
+	rebuildClient := *c
+	longHTTP := *c.HTTP
+	if longHTTP.Timeout < 3*time.Minute {
+		longHTTP.Timeout = 3 * time.Minute
+	}
+	rebuildClient.HTTP = &longHTTP
+	if err := rebuildClient.doJSON(http.MethodPost, "/rebuild", api.RebuildRequest{Namespace: namespace}, &result); err != nil {
+		return nil, err
+	}
+	return result.Results, nil
 }
 
 func (c *Client) ListPods() ([]api.PodStatus, error) {
