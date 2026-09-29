@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,6 +11,24 @@ import (
 
 	"github.com/shimshimney/pkg/api"
 )
+
+// StatusError is returned when the server responds with a non-2xx status.
+type StatusError struct {
+	URL        string
+	StatusCode int
+	Status     string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("request to %s failed with status %s", e.URL, e.Status)
+}
+
+// IsNotFound reports whether err is a 404 response, which the operator returns
+// for heartbeats from pods it has no registration for (e.g. after a restart).
+func IsNotFound(err error) bool {
+	var statusErr *StatusError
+	return errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound
+}
 
 type Client struct {
 	BaseURL string
@@ -46,7 +65,7 @@ func (c *Client) doJSON(method, path string, payload any, out any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("request to %s failed with status %s", url, resp.Status)
+		return &StatusError{URL: url, StatusCode: resp.StatusCode, Status: resp.Status}
 	}
 	if out == nil {
 		return nil

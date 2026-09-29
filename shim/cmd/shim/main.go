@@ -69,8 +69,9 @@ func run() error {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(api.HealthResponse{Status: "ok", Timestamp: time.Now()})
 	})
+	heartbeatReq := api.HeartbeatRequest{Namespace: namespace, PodID: podID, Name: name, Host: host, Port: mustInt(port), State: "healthy"}
 	m.HandleFunc("/heartbeat", func(w http.ResponseWriter, r *http.Request) {
-		if err := client.Heartbeat(api.HeartbeatRequest{Namespace: namespace, PodID: podID, Name: name, Host: host, Port: mustInt(port), State: "healthy"}); err != nil {
+		if err := heartbeat(client, req, heartbeatReq, logger); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -95,13 +96,25 @@ func run() error {
 	defer runner.Stop()
 	go func() {
 		for range time.Tick(10 * time.Second) {
-			if err := client.Heartbeat(api.HeartbeatRequest{Namespace: namespace, PodID: podID, Name: name, Host: host, Port: mustInt(port), State: "healthy"}); err != nil {
+			if err := heartbeat(client, req, heartbeatReq, logger); err != nil {
 				logger.Warn("heartbeat failed", slog.String("error", err.Error()))
 			}
 		}
 	}()
 	log.Printf("shim serving on :%s", port)
 	return http.ListenAndServe(":"+port, m)
+}
+
+// heartbeat sends a heartbeat and re-registers if the operator no longer knows
+// this pod, which happens whenever the operator restarts and loses its
+// in-memory registry.
+func heartbeat(client *pclient.Client, reg api.RegisterRequest, hb api.HeartbeatRequest, logger *slog.Logger) error {
+	err := client.Heartbeat(hb)
+	if !pclient.IsNotFound(err) {
+		return err
+	}
+	logger.Info("operator does not know this pod, re-registering")
+	return client.Register(reg)
 }
 
 func mustInt(value string) int {

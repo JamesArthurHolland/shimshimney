@@ -21,6 +21,9 @@ spec:
     matchLabels:
       control-plane: controller-manager
   replicas: 1
+  # The shim registry is held in memory, so never run two operators at once.
+  strategy:
+    type: Recreate
   template:
     metadata:
       annotations:

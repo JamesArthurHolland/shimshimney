@@ -7,6 +7,9 @@ metadata:
     app: operator
 spec:
   replicas: 1
+  # The shim registry is held in memory, so never run two operators at once.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: operator
