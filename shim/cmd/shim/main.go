@@ -18,6 +18,14 @@ import (
 	"github.com/shimshimney/shim/internal/runner"
 )
 
+const startupBanner = ` ######  ##   ##  ######  ##   ##
+##       ##   ##     ##   ##  ##
+##       ##   ##     ##   ## ## ##
+ ######  #######     ##   ## ## ##
+      ## ##   ##     ##   ##     ##
+##    ## ##   ##     ##   ##     ##
+ ######  ##   ##  ######  ##     ##`
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -101,6 +109,7 @@ func run() error {
 			}
 		}
 	}()
+	fmt.Println(startupBanner)
 	log.Printf("shim serving on :%s", port)
 	return http.ListenAndServe(":"+port, m)
 }
