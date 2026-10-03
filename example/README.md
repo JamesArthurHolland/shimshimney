@@ -33,10 +33,10 @@ already-running application.
 From the repository root, with Docker available:
 
 ```sh
-docker build -f example/projects/dockerfile/Dockerfile -t shimshimney/shim:dev .
+docker build -f example/projects/dockerfile/Dockerfile -t shimshimney/shim-example-go:dev .
 docker run --rm -p 9090:9090 -p 8080:8080 \
   -e APP_DIR=/workspace/example/projects/backend-1 \
-  -e APP_NAME=backend-1 -e POD_NAMESPACE=example shimshimney/shim:dev
+  -e APP_NAME=backend-1 -e POD_NAMESPACE=example shimshimney/shim-example-go:dev
 ```
 
 In another terminal, `curl http://localhost:8080/hello` queries the backend and
