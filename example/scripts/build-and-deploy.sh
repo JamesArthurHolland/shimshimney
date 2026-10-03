@@ -27,12 +27,12 @@ command -v envsubst >/dev/null 2>&1 || { echo "envsubst is required" >&2; exit 1
 cluster="${K3D_CLUSTER_NAME:-shimshimney}"
 kubectl --context "k3d-${cluster}" get nodes >/dev/null
 
-echo "==> building shim runtime image (shimshimney/shim:${image_tag})"
-docker build -f example/projects/dockerfile/Dockerfile -t "shimshimney/shim:${image_tag}" .
+echo "==> building shim runtime image (shimshimney/shim-example-go:${image_tag})"
+docker build -f example/projects/dockerfile/Dockerfile -t "shimshimney/shim-example-go:${image_tag}" .
 
 echo "==> building operator image (shimshimney/operator:${image_tag})"
 docker build -f operator/Dockerfile -t "shimshimney/operator:${image_tag}" .
-k3d image import "shimshimney/shim:${image_tag}" "shimshimney/operator:${image_tag}" -c "$cluster"
+k3d image import "shimshimney/shim-example-go:${image_tag}" "shimshimney/operator:${image_tag}" -c "$cluster"
 
 # discover every project directory under example/projects except the
 # infrastructure helpers (common, dockerfile)

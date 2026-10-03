@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: shim
-          image: shimshimney/shim:${IMAGE_TAG}
+          image: shimshimney/shim-example-go:${IMAGE_TAG}
           imagePullPolicy: IfNotPresent
           env:
             - name: APP_NAME
