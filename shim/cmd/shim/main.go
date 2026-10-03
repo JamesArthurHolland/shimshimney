@@ -114,7 +114,10 @@ func heartbeat(client *pclient.Client, reg api.RegisterRequest, hb api.Heartbeat
 		return err
 	}
 	logger.Info("operator does not know this pod, re-registering")
-	return client.Register(reg)
+	if err := client.Register(reg); err != nil {
+		return fmt.Errorf("re-register with operator: %w", err)
+	}
+	return client.Heartbeat(hb)
 }
 
 func mustInt(value string) int {
