@@ -1,11 +1,88 @@
 # shimshimney
 
+If you have 10 or so microservices in a compiled language like Golang, the main time sink on a full rebuild is the copying of the entire build context into the docker daemon. The computation of the cache keys is a big part of this as docker has to cache all the files to compute this key, it can't use last update time etc otherwise the key wouldn't match on remote servers.
+
+I've seen reductions of 3-5 minutes down to 10-15 seconds using shimshimney as the vendor folder persists and you can just reload the `go run`, in a similar way to `npm run dev` except it's manual for compiled languages.
+
 shimshimney rebuilds the code running inside a Kubernetes pod **without
 rebuilding its container image**. A small **shim** is the container entrypoint:
 it builds and runs your application, registers with an **operator**, and exposes
 a `/rebuild` endpoint. When you trigger a rebuild, the operator fans the request
 out to every registered pod, which recompiles from a mounted source directory
 and restarts the app in place. A **CLI** (`shimshimney`) drives the operator API.
+
+## How it works
+
+The source code is mounted into each pod from a volume (a `hostPath` from the
+k3d node in the example), so the compiler inside the pod always sees the latest
+code. A rebuild is therefore just "recompile and restart the process" — no image
+build, no push, no pull.
+
+```mermaid
+sequenceDiagram
+    participant Dev as You (CLI)
+    participant Op as Operator
+    participant Shim as Shim (pod)
+    participant App as Your app
+
+    Note over Shim,App: container starts
+    Shim->>Shim: build + start app (hot mode)
+    Shim->>Op: POST /register (namespace, pod_id, host=podIP, port=9090)
+    Op->>Op: record pod in in-memory registry
+    Op->>Op: EnsurePodService → svc-<pod_id> (selector pod_id, targetPort 9090)
+    loop every 10s
+        Shim->>Op: POST /heartbeat
+    end
+
+    Dev->>Op: POST /rebuild {namespace}
+    par for each registered pod in namespace
+        Op->>Shim: POST http://<podIP>:9090/rebuild
+        Shim->>Shim: rebuild from mounted source
+        Shim->>App: stop old process, start new binary
+    end
+    Op-->>Dev: per-pod results
+```
+
+### Registration and Service creation
+
+When the shim starts in `hot` mode it registers itself with the operator,
+sending its namespace, pod ID, host, and the port its `/rebuild` endpoint
+listens on (`9090`). The host is the pod IP, injected via the downward API
+(`status.podIP`) in [example/k8s/backend-template.yaml](example/k8s/backend-template.yaml).
+
+On each `/register`, the operator:
+
+1. Upserts the pod into an in-memory registry keyed by `namespace/pod_id`
+   (see [operator/internal/registry/registry.go](operator/internal/registry/registry.go)).
+2. Ensures a Kubernetes Service for the pod via the k8s manager
+   (see [operator/internal/k8s/service.go](operator/internal/k8s/service.go)):
+   named `svc-<pod_id>`, in the pod's namespace, with `port` and `targetPort`
+   set to the registered shim port and a selector of `pod_id: <pod_id>`. The pod
+   template labels each pod with the matching `pod_id` label so the Service
+   resolves to exactly that pod.
+
+The shim keeps the registration fresh with a `/heartbeat` every 10 seconds. The
+operator's registry is in memory, so if the operator restarts, the next
+heartbeat returns `404` and the shim automatically re-registers.
+
+### Triggering a rebuild
+
+`POST /rebuild {"namespace": "..."}` (sent by the CLI's `shimshimney rebuild`)
+makes the operator look up every registered pod in that namespace and, in
+parallel, `POST http://<host>:<port>/rebuild` to each shim
+(see [operator/internal/server/server.go](operator/internal/server/server.go)).
+Each shim rebuilds from the mounted source; **only if the build succeeds** does
+it stop the old process and start the new binary, so a broken build leaves the
+running app untouched. The operator collects a per-pod result and returns them
+to the caller. Rebuild requests must name a namespace — the operator never
+rebuilds pods across namespaces.
+
+> **Note:** in the current HTTP path the operator records the Service definition
+> in memory and fans rebuilds out directly to each pod's reported `host:port`
+> rather than routing through the Service. Real Kubernetes Services are
+> reconciled by the `ShimPod` controller for `ShimPod` custom resources; the
+> example deploys explicit backend Services alongside the shim pods. Treat the
+> example manifests as a local development setup.
 
 ## Components
 
